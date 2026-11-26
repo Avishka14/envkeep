@@ -19,7 +19,11 @@ def parse_env_file(path: Path) -> dict[str, str]:
         if "=" not in line:
             continue  # not a KEY=VALUE line
         key, _, value = line.partition("=")  # splits on the FIRST "=" only
-        values[key.strip()] = _strip_quotes(value.strip())
+        key = key.strip()
+        value = value.strip()
+        if value and value[0] not in "\"'":
+            value = value.split(" #", 1)[0].strip()  # drop inline comment
+        values[key] = _strip_quotes(value)
     return values
 
 
