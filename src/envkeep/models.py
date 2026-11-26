@@ -11,4 +11,4 @@ class CheckResult:
 
     @property
     def ok(self) -> bool:
-        return not (self.missing or self.extra or self.empty)
+        return not (self.missing or self.empty)
