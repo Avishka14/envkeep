@@ -1,4 +1,10 @@
+from pathlib import Path
+
 import typer
+
+from envkeep.compare import compare
+from envkeep.output import print_check_result
+from envkeep.parser import parse_env_file
 
 app = typer.Typer(
     help="Keep your .env files in sync with .env.example.",
@@ -12,6 +18,19 @@ def main() -> None:
 
 
 @app.command()
-def check() -> None:
-    """Compare a .env file against .env.example."""
-    typer.echo("check: not implemented yet")
+def check(
+    env: Path = typer.Option(
+        Path(".env"), "--env", "-e", help="The .env file to check."
+    ),
+    example: Path = typer.Option(
+        Path(".env.example"), "--example", "-x", help="The file used as the source of truth."
+    ),
+) -> None:
+    """Compare a .env file against .env.example.
+
+    Exits with code 1 if variables are missing or empty, so it works in CI.
+    """
+    result = compare(parse_env_file(example), parse_env_file(env))
+    print_check_result(result, env, example)
+    if not result.ok:
+        raise typer.Exit(code=1)
