@@ -3,7 +3,7 @@ from pathlib import Path
 import typer
 
 from envkeep.compare import compare
-from envkeep.output import print_check_result
+from envkeep.output import print_check_result, print_error
 from envkeep.parser import parse_env_file
 
 app = typer.Typer(
@@ -30,6 +30,11 @@ def check(
 
     Exits with code 1 if variables are missing or empty, so it works in CI.
     """
+    for path in (env, example):
+        if not path.is_file():
+            print_error(f"file not found: {path}")
+            raise typer.Exit(code=2)
+
     result = compare(parse_env_file(example), parse_env_file(env))
     print_check_result(result, env, example)
     if not result.ok:
