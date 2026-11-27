@@ -1,12 +1,19 @@
 HEADER = "# Added by envkeep sync"
 
 
+_ESCAPES = str.maketrans({"\\": "\\\\", '"': '\\"', "\n": "\\n", "\r": "\\r"})
+
+
+def _needs_quotes(value: str) -> bool:
+    """Whitespace, '#', or a quote character would be misread in an unquoted value."""
+    return any(char.isspace() or char in "#'\"" for char in value)
+
+
 def _format_value(value: str) -> str:
-    """Quote values that would be misread without quotes (spaces or #)."""
-    if any(char.isspace() or char == "#" for char in value):
-        quote = "'" if '"' in value else '"'
-        return f"{quote}{value}{quote}"
-    return value
+    """Serialize a value so both envkeep and python-dotenv read back the same string."""
+    if not _needs_quotes(value):
+        return value
+    return '"' + value.translate(_ESCAPES) + '"'
 
 
 def _detect_newline(text: str) -> str:

@@ -95,3 +95,20 @@ def test_unterminated_quote_raises_with_line_number():
 def test_multiline_matches_python_dotenv(write_env):
     path = write_env('KEY="line1\n# inside value\nline3"\nOTHER=2\n')
     assert parse_env_file(path) == dict(dotenv_values(path))
+
+
+def test_double_quoted_escapes_are_decoded():
+    text = r'A="x\"y\\z\nw"' + "\n"
+    assert parse_env_text(text) == {"A": 'x"y\\z\nw'}
+
+
+def test_single_quoted_only_decodes_backslash_and_quote():
+    text = r"B='it\'s \\ \n'" + "\n"
+    assert parse_env_text(text) == {"B": "it's \\ \\n"}  # \n stays two characters
+
+
+def test_escapes_match_python_dotenv(write_env):
+    path = write_env(r"""A="x\"y\\z\nw"
+B='it\'s \\ \n'
+""")
+    assert parse_env_file(path) == dict(dotenv_values(path))

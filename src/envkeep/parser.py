@@ -1,3 +1,5 @@
+import codecs
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +23,16 @@ class Entry:
     prefix: str = ""  # assignment: "export " or ""
     key: str = ""  # assignment
     value: str = ""  # assignment: the value, without quotes or inline comment
+
+
+_DOUBLE_QUOTE_ESCAPES = re.compile(r"\\[\\'\"abfnrtv]")
+_SINGLE_QUOTE_ESCAPES = re.compile(r"\\[\\']")
+
+
+def _decode_escapes(value: str, quote: str) -> str:
+    """Decode backslash escapes in a quoted value, following python-dotenv's rules."""
+    pattern = _DOUBLE_QUOTE_ESCAPES if quote == '"' else _SINGLE_QUOTE_ESCAPES
+    return pattern.sub(lambda m: codecs.decode(m.group(0), "unicode-escape"), value)
 
 
 def _find_closing_quote(chunk: str, quote: str) -> int:
@@ -51,7 +63,7 @@ def _read_quoted(
         end = _find_closing_quote(chunk, quote)
         if end != -1:
             collected.append(chunk[:end])  # anything after the closing quote is ignored
-            return "\n".join(collected), index + 1
+            return _decode_escapes("\n".join(collected), quote), index + 1
         collected.append(chunk)
         index += 1
         if index >= len(lines):

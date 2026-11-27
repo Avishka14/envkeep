@@ -1,5 +1,10 @@
-from envkeep.syncer import HEADER, sync_env
+import io
+
+import pytest
+from dotenv import dotenv_values
+
 from envkeep.parser import parse_env_text
+from envkeep.syncer import HEADER, sync_env
 
 
 def test_appends_only_missing_keys():
@@ -80,3 +85,40 @@ def test_hash_inside_quotes_is_kept_and_trailing_comment_dropped():
 
     assert 'TAG="a # b"\n' in new_text
     assert "# note" not in new_text
+
+
+def test_apostrophe_and_double_quotes_are_escaped():
+    value = 'it\'s "ready now"'
+
+    new_text, _ = sync_env({"MESSAGE": value}, "", {})
+
+    assert 'MESSAGE="it\'s \\"ready now\\""' in new_text
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "hello world",
+        "a#b",
+        "it's",
+        'say "hi"',
+        'it\'s "ready now"',
+        r"C:\dir\file name",
+        "line1\nline2",
+        " padded ",
+        '"starts with a quote',
+        "tab\there",
+    ],
+)
+def test_synced_values_round_trip(value):
+    new_text, _ = sync_env({"KEY": value}, "", {})
+
+    assert parse_env_text(new_text)["KEY"] == value
+    assert dotenv_values(stream=io.StringIO(new_text))["KEY"] == value
+
+
+def test_multiline_value_is_written_on_one_line():
+    new_text, _ = sync_env({"KEY": "a\nb"}, "A=1\r\n", {"A": "1"})
+
+    assert 'KEY="a\\nb"' in new_text
+    assert "a\nb" not in new_text
