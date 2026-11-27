@@ -26,6 +26,12 @@ def _require_files(*paths: Path) -> None:
             print_error(f"file not found: {path}")
             raise typer.Exit(code=2)
 
+def _is_same_file(a: Path, b: Path) -> bool:
+    """True if both paths point at the same file, including hard links and symlinks."""
+    if a.resolve() == b.resolve():
+        return True  # same path after resolving symlinks (works even if b doesn't exist yet)
+    return b.exists() and a.samefile(b)  # same file under different names, e.g. a hard link
+
 
 @app.callback()
 def main() -> None:
@@ -72,7 +78,7 @@ def generate(
 ) -> None:
     """Build .env.example from .env, stripping the values but keeping comments."""
     _require_files(env)
-    if env.resolve() == output.resolve():
+    if _is_same_file(env, output):
         print_error(
             "--env and --output are the same file; refusing to overwrite your values"
         )

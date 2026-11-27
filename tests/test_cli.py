@@ -2,6 +2,9 @@ from typer.testing import CliRunner
 
 from envkeep.cli import app
 
+import os
+import pytest
+
 runner = CliRunner()
 
 
@@ -86,6 +89,19 @@ def test_generate_refuses_when_input_and_output_are_the_same_file(write_env):
     env = write_env("A=secret\n")
 
     result = run("generate", "--env", env, "--output", env, "--force")
+
+    assert result.exit_code == 2
+    assert env.read_text(encoding="utf-8") == "A=secret\n"
+
+def test_generate_refuses_when_output_is_a_hard_link_to_env(write_env, tmp_path):
+    env = write_env("A=secret\n")
+    link = tmp_path / "linked.env.example"
+    try:
+        os.link(env, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("hard links are not supported on this filesystem")
+
+    result = run("generate", "--env", env, "--output", link, "--force")
 
     assert result.exit_code == 2
     assert env.read_text(encoding="utf-8") == "A=secret\n"
