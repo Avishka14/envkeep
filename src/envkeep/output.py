@@ -41,7 +41,9 @@ def print_check_result(result: CheckResult, env: Path, example: Path) -> None:
         f"{len(result.extra)} extra"
     )
     if result.ok:
-        console.print(f"[green]OK[/green] {summary} (extra variables are only warnings)")
+        console.print(
+            f"[green]OK[/green] {summary} (extra variables are only warnings)"
+        )
     else:
         console.print(f"[red]FAILED[/red] {summary}")
 
@@ -49,3 +51,21 @@ def print_check_result(result: CheckResult, env: Path, example: Path) -> None:
 def print_error(message: str) -> None:
     """Print an error to stderr, so it doesn't mix with normal output."""
     err_console.print(f"[red]error:[/red] {escape(message)}")
+
+
+def print_success(message: str) -> None:
+    """Print a green OK line."""
+    console.print(f"[green]OK[/green] {escape(message)}")
+
+
+def print_sync_result(added: list[str], env: Path, dry_run: bool) -> None:
+    """Print which variables were (or would be) added to the env file."""
+    env_label = escape(str(env))
+    if not added:
+        console.print(f"[green]OK[/green] {env_label} already has every variable")
+        return
+
+    verb = "Would add" if dry_run else "Added"
+    console.print(f"[green]{verb}[/green] {len(added)} variable(s) to {env_label}:")
+    for key in added:
+        console.print(f"  + {escape(key)}")
