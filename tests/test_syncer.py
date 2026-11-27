@@ -11,7 +11,9 @@ def test_appends_only_missing_keys():
 
 def test_never_modifies_existing_content():
     env_text = "# my notes\nA=custom # keep me\n\nZ=extra\n"
-    new_text, _ = sync_env({"A": "1", "B": "2"}, env_text, {"A": "custom", "Z": "extra"})
+    new_text, _ = sync_env(
+        {"A": "1", "B": "2"}, env_text, {"A": "custom", "Z": "extra"}
+    )
 
     assert new_text.startswith(env_text)
 

@@ -14,8 +14,7 @@ def parse_env_file(path: Path) -> dict[str, str]:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue  # skip blanks and comments
-        if line.startswith("export "):
-            line = line[len("export "):]
+        line = line.removeprefix("export ")
         if "=" not in line:
             continue  # not a KEY=VALUE line
         key, _, value = line.partition("=")  # splits on the FIRST "=" only

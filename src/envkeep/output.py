@@ -41,7 +41,9 @@ def print_check_result(result: CheckResult, env: Path, example: Path) -> None:
         f"{len(result.extra)} extra"
     )
     if result.ok:
-        console.print(f"[green]OK[/green] {summary} (extra variables are only warnings)")
+        console.print(
+            f"[green]OK[/green] {summary} (extra variables are only warnings)"
+        )
     else:
         console.print(f"[red]FAILED[/red] {summary}")
 
@@ -54,7 +56,7 @@ def print_error(message: str) -> None:
 def print_success(message: str) -> None:
     """Print a green OK line."""
     console.print(f"[green]OK[/green] {escape(message)}")
-    
+
 
 def print_sync_result(added: list[str], env: Path, dry_run: bool) -> None:
     """Print which variables were (or would be) added to the env file."""

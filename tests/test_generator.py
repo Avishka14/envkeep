@@ -12,7 +12,10 @@ def test_keeps_export_prefix():
 
 
 def test_uses_placeholder():
-    assert generate_example("A=1\nB=2\n", placeholder="change-me") == "A=change-me\nB=change-me\n"
+    assert (
+        generate_example("A=1\nB=2\n", placeholder="change-me")
+        == "A=change-me\nB=change-me\n"
+    )
 
 
 def test_value_with_equals_signs_is_fully_removed():
@@ -29,7 +32,9 @@ def test_empty_input_gives_empty_output():
 
 def test_generated_file_has_the_same_keys_and_no_values(write_env):
     env = write_env('A=1\nexport B=2\n# note\nC="x y"\n')
-    generated = write_env(generate_example(env.read_text(encoding="utf-8")), "example.env")
+    generated = write_env(
+        generate_example(env.read_text(encoding="utf-8")), "example.env"
+    )
 
     values = parse_env_file(generated)
     assert list(values) == ["A", "B", "C"]

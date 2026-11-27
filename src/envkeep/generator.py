@@ -19,7 +19,7 @@ def generate_example(text: str, placeholder: str = "") -> str:
         prefix = ""
         if stripped.startswith("export "):
             prefix = "export "
-            stripped = stripped[len("export "):]
+            stripped = stripped[len("export ") :]
 
         key, _, _ = stripped.partition("=")
         out_lines.append(f"{prefix}{key.strip()}={placeholder}")
