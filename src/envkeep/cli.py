@@ -3,13 +3,22 @@ from pathlib import Path
 import typer
 
 from envkeep.compare import compare
-from envkeep.output import print_check_result, print_error
+from envkeep.generator import generate_example
+from envkeep.output import print_check_result, print_error, print_success
 from envkeep.parser import parse_env_file
 
 app = typer.Typer(
     help="Keep your .env files in sync with .env.example.",
     no_args_is_help=True,
 )
+
+
+def _require_files(*paths: Path) -> None:
+    """Exit with code 2 if any of the given files doesn't exist."""
+    for path in paths:
+        if not path.is_file():
+            print_error(f"file not found: {path}")
+            raise typer.Exit(code=2)
 
 
 @app.callback()
@@ -30,12 +39,37 @@ def check(
 
     Exits with code 1 if variables are missing or empty, so it works in CI.
     """
-    for path in (env, example):
-        if not path.is_file():
-            print_error(f"file not found: {path}")
-            raise typer.Exit(code=2)
-
+    _require_files(env, example)
     result = compare(parse_env_file(example), parse_env_file(env))
     print_check_result(result, env, example)
     if not result.ok:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def generate(
+    env: Path = typer.Option(
+        Path(".env"), "--env", "-e", help="The .env file to read."
+    ),
+    output: Path = typer.Option(
+        Path(".env.example"), "--output", "-o", help="Where to write the example file."
+    ),
+    placeholder: str = typer.Option(
+        "", "--placeholder", "-p", help="Value to put after each key."
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Overwrite the output file if it already exists."
+    ),
+) -> None:
+    """Build .env.example from .env, stripping the values but keeping comments."""
+    _require_files(env)
+    if env.resolve() == output.resolve():
+        print_error("--env and --output are the same file; refusing to overwrite your values")
+        raise typer.Exit(code=2)
+    if output.exists() and not force:
+        print_error(f"{output} already exists (use --force to overwrite)")
+        raise typer.Exit(code=2)
+
+    text = env.read_text(encoding="utf-8")
+    output.write_text(generate_example(text, placeholder), encoding="utf-8")
+    print_success(f"wrote {len(parse_env_file(env))} variables to {output}")

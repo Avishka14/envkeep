@@ -49,3 +49,8 @@ def print_check_result(result: CheckResult, env: Path, example: Path) -> None:
 def print_error(message: str) -> None:
     """Print an error to stderr, so it doesn't mix with normal output."""
     err_console.print(f"[red]error:[/red] {escape(message)}")
+
+
+def print_success(message: str) -> None:
+    """Print a green OK line."""
+    console.print(f"[green]OK[/green] {escape(message)}")
