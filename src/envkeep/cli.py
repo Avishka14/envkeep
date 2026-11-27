@@ -4,8 +4,9 @@ import typer
 
 from envkeep.compare import compare
 from envkeep.generator import generate_example
-from envkeep.output import print_check_result, print_error, print_success
+from envkeep.output import print_check_result, print_error, print_success, print_sync_result
 from envkeep.parser import parse_env_file
+from envkeep.syncer import sync_env
 
 app = typer.Typer(
     help="Keep your .env files in sync with .env.example.",
@@ -73,3 +74,28 @@ def generate(
     text = env.read_text(encoding="utf-8")
     output.write_text(generate_example(text, placeholder), encoding="utf-8")
     print_success(f"wrote {len(parse_env_file(env))} variables to {output}")
+
+@app.command()
+def sync(
+    env: Path = typer.Option(
+        Path(".env"), "--env", "-e", help="The .env file to update."
+    ),
+    example: Path = typer.Option(
+        Path(".env.example"), "--example", "-x", help="The file used as the source of truth."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be added without writing anything."
+    ),
+) -> None:
+    """Add variables that are in .env.example but missing from .env.
+
+    Existing variables and values are never changed.
+    """
+    _require_files(env, example)
+
+    env_text = env.read_text(encoding="utf-8")
+    new_text, added = sync_env(parse_env_file(example), env_text, parse_env_file(env))
+
+    if added and not dry_run:
+        env.write_text(new_text, encoding="utf-8")
+    print_sync_result(added, env, dry_run)

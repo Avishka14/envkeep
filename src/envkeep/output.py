@@ -54,3 +54,16 @@ def print_error(message: str) -> None:
 def print_success(message: str) -> None:
     """Print a green OK line."""
     console.print(f"[green]OK[/green] {escape(message)}")
+    
+
+def print_sync_result(added: list[str], env: Path, dry_run: bool) -> None:
+    """Print which variables were (or would be) added to the env file."""
+    env_label = escape(str(env))
+    if not added:
+        console.print(f"[green]OK[/green] {env_label} already has every variable")
+        return
+
+    verb = "Would add" if dry_run else "Added"
+    console.print(f"[green]{verb}[/green] {len(added)} variable(s) to {env_label}:")
+    for key in added:
+        console.print(f"  + {escape(key)}")
