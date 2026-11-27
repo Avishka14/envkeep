@@ -192,3 +192,17 @@ def test_check_reports_unterminated_quote_with_exit_code_2(write_env):
     result = run("check", "--env", env, "--example", example)
 
     assert result.exit_code == 2
+
+
+def test_sync_does_not_copy_trailing_comments_after_quoted_values(write_env):
+    example = write_env('NAME="hello" # note\nTAG="a # b" # other\n', "example.env")
+    env = write_env("A=1\n")
+
+    result = run("sync", "--env", env, "--example", example)
+
+    text = env.read_text(encoding="utf-8")
+    assert result.exit_code == 0
+    assert "NAME=hello\n" in text
+    assert 'TAG="a # b"\n' in text
+    assert "# note" not in text
+    assert "# other" not in text
