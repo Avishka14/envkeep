@@ -141,3 +141,16 @@ def test_sync_makes_check_stop_reporting_missing(write_env):
     result = run("check", "--env", env, "--example", example)
 
     assert result.exit_code == 0
+
+def test_sync_preserves_crlf_line_endings(write_env, tmp_path):
+    example = write_env("A=1\nB=2\n", "example.env")
+    env = tmp_path / ".env"
+    env.write_bytes(b"A=custom\r\n")
+
+    result = run("sync", "--env", env, "--example", example)
+
+    data = env.read_bytes()
+    assert result.exit_code == 0
+    assert data.startswith(b"A=custom\r\n")  # existing line untouched
+    assert b"B=2\r\n" in data
+    assert b"\n" not in data.replace(b"\r\n", b"")  # no bare LF anywhere

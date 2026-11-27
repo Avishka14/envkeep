@@ -112,10 +112,13 @@ def sync(
     Existing variables and values are never changed.
     """
     _require_files(env, example)
-
-    env_text = env.read_text(encoding="utf-8")
+    
+    # newline="" turns off newline translation, so existing \r\n endings survive untouched
+    with env.open(encoding="utf-8", newline="") as handle:
+        env_text = handle.read()
     new_text, added = sync_env(parse_env_file(example), env_text, parse_env_file(env))
 
     if added and not dry_run:
-        env.write_text(new_text, encoding="utf-8")
+        with env.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(new_text)
     print_sync_result(added, env, dry_run)

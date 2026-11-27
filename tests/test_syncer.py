@@ -47,3 +47,17 @@ def test_quotes_values_with_spaces_or_hash():
 
     assert 'MSG="hello world"' in new_text
     assert 'TAG="a#b"' in new_text
+
+
+def test_appended_lines_use_crlf_when_file_uses_crlf():
+    env_text = "A=1\r\n"
+    new_text, _ = sync_env({"B": "2"}, env_text, {"A": "1"})
+
+    assert new_text.startswith(env_text)
+    assert new_text == f"A=1\r\n\r\n{HEADER}\r\nB=2\r\n"
+    assert "\n" not in new_text.replace("\r\n", "")  # no bare LF anywhere
+
+
+def test_lf_file_stays_lf():
+    new_text, _ = sync_env({"B": "2"}, "A=1\n", {"A": "1"})
+    assert "\r" not in new_text
