@@ -1,9 +1,9 @@
+import os
+
+import pytest
 from typer.testing import CliRunner
 
 from envkeep.cli import app
-
-import os
-import pytest
 
 runner = CliRunner()
 
@@ -93,6 +93,7 @@ def test_generate_refuses_when_input_and_output_are_the_same_file(write_env):
     assert result.exit_code == 2
     assert env.read_text(encoding="utf-8") == "A=secret\n"
 
+
 def test_generate_refuses_when_output_is_a_hard_link_to_env(write_env, tmp_path):
     env = write_env("A=secret\n")
     link = tmp_path / "linked.env.example"
@@ -142,6 +143,7 @@ def test_sync_makes_check_stop_reporting_missing(write_env):
 
     assert result.exit_code == 0
 
+
 def test_sync_preserves_crlf_line_endings(write_env, tmp_path):
     example = write_env("A=1\nB=2\n", "example.env")
     env = tmp_path / ".env"
@@ -154,3 +156,19 @@ def test_sync_preserves_crlf_line_endings(write_env, tmp_path):
     assert data.startswith(b"A=custom\r\n")  # existing line untouched
     assert b"B=2\r\n" in data
     assert b"\n" not in data.replace(b"\r\n", b"")  # no bare LF anywhere
+
+
+def test_sync_write_failure_leaves_original_intact(write_env, monkeypatch):
+    example = write_env("A=1\nB=2\n", "example.env")
+    env = write_env("A=custom\n")
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("envkeep.fileio.os.replace", boom)
+
+    result = run("sync", "--env", env, "--example", example)
+
+    assert result.exit_code == 2
+    assert "could not write" in result.output
+    assert env.read_text(encoding="utf-8") == "A=custom\n"

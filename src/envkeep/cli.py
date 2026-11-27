@@ -3,6 +3,7 @@ from pathlib import Path
 import typer
 
 from envkeep.compare import compare
+from envkeep.fileio import atomic_write_text
 from envkeep.generator import generate_example
 from envkeep.output import (
     print_check_result,
@@ -26,11 +27,14 @@ def _require_files(*paths: Path) -> None:
             print_error(f"file not found: {path}")
             raise typer.Exit(code=2)
 
+
 def _is_same_file(a: Path, b: Path) -> bool:
     """True if both paths point at the same file, including hard links and symlinks."""
     if a.resolve() == b.resolve():
         return True  # same path after resolving symlinks (works even if b doesn't exist yet)
-    return b.exists() and a.samefile(b)  # same file under different names, e.g. a hard link
+    return b.exists() and a.samefile(
+        b
+    )  # same file under different names, e.g. a hard link
 
 
 @app.callback()
@@ -112,13 +116,16 @@ def sync(
     Existing variables and values are never changed.
     """
     _require_files(env, example)
-    
+
     # newline="" turns off newline translation, so existing \r\n endings survive untouched
     with env.open(encoding="utf-8", newline="") as handle:
         env_text = handle.read()
     new_text, added = sync_env(parse_env_file(example), env_text, parse_env_file(env))
 
     if added and not dry_run:
-        with env.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(new_text)
+        try:
+            atomic_write_text(env, new_text)
+        except OSError as exc:
+            print_error(f"could not write {env}: {exc}")
+            raise typer.Exit(code=2) from exc
     print_sync_result(added, env, dry_run)
