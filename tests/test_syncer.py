@@ -108,6 +108,11 @@ def test_apostrophe_and_double_quotes_are_escaped():
         " padded ",
         '"starts with a quote',
         "tab\there",
+        "'token'",
+        '"token"',
+        "'",
+        '"',
+        "ab'cd",
     ],
 )
 def test_synced_values_round_trip(value):
@@ -122,3 +127,17 @@ def test_multiline_value_is_written_on_one_line():
 
     assert 'KEY="a\\nb"' in new_text
     assert "a\nb" not in new_text
+
+
+def test_value_that_starts_with_a_quote_is_quoted():
+    new_text, _ = sync_env({"A": "'token'"}, "", {})
+
+    assert new_text.endswith("A=\"'token'\"\n")
+
+
+def test_ordinary_values_stay_unquoted():
+    new_text, _ = sync_env({"A": "token", "PORT": "8000", "PATH_X": r"C:\dir"}, "", {})
+
+    assert "A=token\n" in new_text
+    assert "PORT=8000\n" in new_text
+    assert "PATH_X=C:\\dir\n" in new_text
