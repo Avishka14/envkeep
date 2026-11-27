@@ -1,4 +1,5 @@
 from envkeep.syncer import HEADER, sync_env
+from envkeep.parser import parse_env_text
 
 
 def test_appends_only_missing_keys():
@@ -61,3 +62,21 @@ def test_appended_lines_use_crlf_when_file_uses_crlf():
 def test_lf_file_stays_lf():
     new_text, _ = sync_env({"B": "2"}, "A=1\n", {"A": "1"})
     assert "\r" not in new_text
+
+
+def test_trailing_comment_after_quoted_value_is_not_copied():
+    example = parse_env_text('NAME="hello" # note\n')
+
+    new_text, _ = sync_env(example, "", {})
+
+    assert "NAME=hello\n" in new_text
+    assert "# note" not in new_text
+
+
+def test_hash_inside_quotes_is_kept_and_trailing_comment_dropped():
+    example = parse_env_text("TAG='a # b' # note\n")
+
+    new_text, _ = sync_env(example, "", {})
+
+    assert 'TAG="a # b"\n' in new_text
+    assert "# note" not in new_text
