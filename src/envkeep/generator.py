@@ -1,27 +1,21 @@
+from envkeep.parser import scan
+
+
 def generate_example(text: str, placeholder: str = "") -> str:
     """Turn the text of a .env file into .env.example text.
 
-    Comments, blank lines, key order, and `export` prefixes are kept.
-    Every value, and any inline comment after it, is replaced by the placeholder.
-    Lines that are neither comments nor KEY=VALUE are dropped, since the parser
-    ignores them and they could contain a stray secret.
+    Genuine comments, blank lines, key order, and `export` prefixes are kept.
+    Every value (including multiline quoted ones) is replaced by the placeholder.
+    Lines that aren't comments or assignments are dropped, since they could
+    contain a stray secret.
+
+    Raises EnvSyntaxError for an unterminated quoted value, so nothing is written
+    when we can't tell where a secret ends.
     """
     out_lines: list[str] = []
-    for raw_line in text.splitlines():
-        stripped = raw_line.strip()
-
-        if not stripped or stripped.startswith("#"):
-            out_lines.append(raw_line)  # keep blank lines and comments
-            continue
-        if "=" not in stripped:
-            continue  # not a variable: drop it
-
-        prefix = ""
-        if stripped.startswith("export "):
-            prefix = "export "
-            stripped = stripped[len("export ") :]
-
-        key, _, _ = stripped.partition("=")
-        out_lines.append(f"{prefix}{key.strip()}={placeholder}")
-
+    for entry in scan(text):
+        if entry.kind == "raw":
+            out_lines.append(entry.line)
+        elif entry.kind == "assignment":
+            out_lines.append(f"{entry.prefix}{entry.key}={placeholder}")
     return "\n".join(out_lines) + "\n" if out_lines else ""

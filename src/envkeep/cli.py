@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -11,8 +12,11 @@ from envkeep.output import (
     print_success,
     print_sync_result,
 )
-from envkeep.parser import parse_env_file
+from envkeep.parser import EnvSyntaxError, parse_env_file, parse_env_text
 from envkeep.syncer import sync_env
+
+DEFAULT_ENV = Path(".env")
+DEFAULT_EXAMPLE = Path(".env.example")
 
 app = typer.Typer(
     help="Keep your .env files in sync with .env.example.",
@@ -31,10 +35,21 @@ def _require_files(*paths: Path) -> None:
 def _is_same_file(a: Path, b: Path) -> bool:
     """True if both paths point at the same file, including hard links and symlinks."""
     if a.resolve() == b.resolve():
-        return True  # same path after resolving symlinks (works even if b doesn't exist yet)
+        return (
+            True  # same path after resolving symlinks (works even if b doesn't exist)
+        )
     return b.exists() and a.samefile(
         b
     )  # same file under different names, e.g. a hard link
+
+
+def _read_env(path: Path) -> dict[str, str]:
+    """Parse an env file, turning a syntax error into a clean message and exit code 2."""
+    try:
+        return parse_env_file(path)
+    except EnvSyntaxError as exc:
+        print_error(f"{path}: {exc}")
+        raise typer.Exit(code=2) from exc
 
 
 @app.callback()
@@ -44,22 +59,20 @@ def main() -> None:
 
 @app.command()
 def check(
-    env: Path = typer.Option(
-        Path(".env"), "--env", "-e", help="The .env file to check."
-    ),
-    example: Path = typer.Option(
-        Path(".env.example"),
-        "--example",
-        "-x",
-        help="The file used as the source of truth.",
-    ),
+    env: Annotated[
+        Path, typer.Option("--env", "-e", help="The .env file to check.")
+    ] = DEFAULT_ENV,
+    example: Annotated[
+        Path,
+        typer.Option("--example", "-x", help="The file used as the source of truth."),
+    ] = DEFAULT_EXAMPLE,
 ) -> None:
     """Compare a .env file against .env.example.
 
     Exits with code 1 if variables are missing or empty, so it works in CI.
     """
     _require_files(env, example)
-    result = compare(parse_env_file(example), parse_env_file(env))
+    result = compare(_read_env(example), _read_env(env))
     print_check_result(result, env, example)
     if not result.ok:
         raise typer.Exit(code=1)
@@ -67,18 +80,22 @@ def check(
 
 @app.command()
 def generate(
-    env: Path = typer.Option(
-        Path(".env"), "--env", "-e", help="The .env file to read."
-    ),
-    output: Path = typer.Option(
-        Path(".env.example"), "--output", "-o", help="Where to write the example file."
-    ),
-    placeholder: str = typer.Option(
-        "", "--placeholder", "-p", help="Value to put after each key."
-    ),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Overwrite the output file if it already exists."
-    ),
+    env: Annotated[
+        Path, typer.Option("--env", "-e", help="The .env file to read.")
+    ] = DEFAULT_ENV,
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Where to write the example file."),
+    ] = DEFAULT_EXAMPLE,
+    placeholder: Annotated[
+        str, typer.Option("--placeholder", "-p", help="Value to put after each key.")
+    ] = "",
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force", "-f", help="Overwrite the output file if it already exists."
+        ),
+    ] = False,
 ) -> None:
     """Build .env.example from .env, stripping the values but keeping comments."""
     _require_files(env)
@@ -92,24 +109,31 @@ def generate(
         raise typer.Exit(code=2)
 
     text = env.read_text(encoding="utf-8")
-    output.write_text(generate_example(text, placeholder), encoding="utf-8")
-    print_success(f"wrote {len(parse_env_file(env))} variables to {output}")
+    try:
+        content = generate_example(text, placeholder)
+    except EnvSyntaxError as exc:
+        print_error(f"{env}: {exc}")
+        raise typer.Exit(code=2) from exc
+
+    output.write_text(content, encoding="utf-8")
+    print_success(f"wrote {len(parse_env_text(text))} variables to {output}")
 
 
 @app.command()
 def sync(
-    env: Path = typer.Option(
-        Path(".env"), "--env", "-e", help="The .env file to update."
-    ),
-    example: Path = typer.Option(
-        Path(".env.example"),
-        "--example",
-        "-x",
-        help="The file used as the source of truth.",
-    ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Show what would be added without writing anything."
-    ),
+    env: Annotated[
+        Path, typer.Option("--env", "-e", help="The .env file to update.")
+    ] = DEFAULT_ENV,
+    example: Annotated[
+        Path,
+        typer.Option("--example", "-x", help="The file used as the source of truth."),
+    ] = DEFAULT_EXAMPLE,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run", help="Show what would be added without writing anything."
+        ),
+    ] = False,
 ) -> None:
     """Add variables that are in .env.example but missing from .env.
 
@@ -120,7 +144,7 @@ def sync(
     # newline="" turns off newline translation, so existing \r\n endings survive untouched
     with env.open(encoding="utf-8", newline="") as handle:
         env_text = handle.read()
-    new_text, added = sync_env(parse_env_file(example), env_text, parse_env_file(env))
+    new_text, added = sync_env(_read_env(example), env_text, _read_env(env))
 
     if added and not dry_run:
         try:

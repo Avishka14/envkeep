@@ -1,8 +1,9 @@
 from pathlib import Path
 
+import pytest
 from dotenv import dotenv_values
 
-from envkeep.parser import parse_env_file
+from envkeep.parser import EnvSyntaxError, parse_env_file, parse_env_text
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -64,4 +65,33 @@ def test_hash_inside_quotes_is_kept(write_env):
 
 def test_matches_python_dotenv_on_tricky_file():
     path = FIXTURES / "tricky.env"
+    assert parse_env_file(path) == dict(dotenv_values(path))
+
+
+def test_multiline_quoted_value_is_one_variable():
+    text = 'TOKEN="line1\n# not-a-comment\nline3"\nB=2\n'
+    assert parse_env_text(text) == {"TOKEN": "line1\n# not-a-comment\nline3", "B": "2"}
+
+
+def test_lines_inside_a_multiline_value_are_not_variables():
+    text = 'PRIVATE="-----BEGIN\nFAKE=leak\n-----END"\n'
+    assert list(parse_env_text(text)) == ["PRIVATE"]
+
+
+def test_escaped_quote_does_not_end_the_value():
+    text = 'A="say \\"hi\\""\nB=2\n'
+    assert list(parse_env_text(text)) == ["A", "B"]
+
+
+def test_quoted_value_followed_by_inline_comment():
+    assert parse_env_text('A="x" # note\n') == {"A": "x"}
+
+
+def test_unterminated_quote_raises_with_line_number():
+    with pytest.raises(EnvSyntaxError, match="line 2"):
+        parse_env_text('A=1\nB="never closed\nC=3\n')
+
+
+def test_multiline_matches_python_dotenv(write_env):
+    path = write_env('KEY="line1\n# inside value\nline3"\nOTHER=2\n')
     assert parse_env_file(path) == dict(dotenv_values(path))

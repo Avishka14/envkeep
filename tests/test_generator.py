@@ -1,5 +1,7 @@
+import pytest
+
 from envkeep.generator import generate_example
-from envkeep.parser import parse_env_file
+from envkeep.parser import EnvSyntaxError, parse_env_file
 
 
 def test_strips_values_and_keeps_comments():
@@ -39,3 +41,20 @@ def test_generated_file_has_the_same_keys_and_no_values(write_env):
     values = parse_env_file(generated)
     assert list(values) == ["A", "B", "C"]
     assert set(values.values()) == {""}
+
+
+def test_multiline_secret_is_not_leaked():
+    text = (
+        'TOKEN="line1\n# actual-secret\nPASSWORD=hunter2\nline3"\n# real comment\nB=2\n'
+    )
+
+    result = generate_example(text)
+
+    assert result == "TOKEN=\n# real comment\nB=\n"
+    assert "actual-secret" not in result
+    assert "hunter2" not in result
+
+
+def test_unterminated_quote_is_rejected():
+    with pytest.raises(EnvSyntaxError):
+        generate_example('A=1\nSECRET="never closed\n# still secret\n')

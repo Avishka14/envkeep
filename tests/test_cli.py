@@ -172,3 +172,23 @@ def test_sync_write_failure_leaves_original_intact(write_env, monkeypatch):
     assert result.exit_code == 2
     assert "could not write" in result.output
     assert env.read_text(encoding="utf-8") == "A=custom\n"
+
+
+def test_generate_rejects_unterminated_quote_and_writes_nothing(write_env, tmp_path):
+    env = write_env('A=1\nB="oops\nC=3\n')
+    output = tmp_path / ".env.example"
+
+    result = run("generate", "--env", env, "--output", output)
+
+    assert result.exit_code == 2
+    assert "unterminated" in result.output
+    assert not output.exists()
+
+
+def test_check_reports_unterminated_quote_with_exit_code_2(write_env):
+    example = write_env("A=1\n", "example.env")
+    env = write_env('A="oops\n')
+
+    result = run("check", "--env", env, "--example", example)
+
+    assert result.exit_code == 2
