@@ -8,6 +8,7 @@ def _format_value(value: str) -> str:
         return f"{quote}{value}{quote}"
     return value
 
+
 def _detect_newline(text: str) -> str:
     """Return the line ending the text already uses (the first one found), default LF."""
     index = text.find("\n")
@@ -24,7 +25,7 @@ def sync_env(
     Returns (new_text, added_keys). Existing content is never modified:
     the new text always starts with the old text.
     """
-    
+
     added = [key for key in example if key not in env]  # keeps the example's order
     if not added:
         return env_text, added
