@@ -54,7 +54,7 @@ def _read_env(path: Path) -> dict[str, str]:
     except EnvSyntaxError as exc:
         print_error(f"{path}: {exc}")
         raise typer.Exit(code=2) from exc
-    
+
 
 def _load_schema(path: Path) -> dict[str, VarRule]:
     """Load a schema, turning every problem into a clean message and exit code 2."""

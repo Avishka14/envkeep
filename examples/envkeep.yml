@@ -1,0 +1,15 @@
+# envkeep schema: describes the variables your app needs.
+# Run:  envkeep check --env .env --schema envkeep.yml
+variables:
+  DATABASE_URL:
+    type: url            # str (default), int, float, bool, url
+  PORT:
+    type: int
+    default: 8000        # has a default, so it may be missing or empty
+  DEBUG:
+    type: bool
+    default: false
+  SECRET_KEY:            # no rules: a required string
+  REDIS_URL:
+    type: url
+    required: false      # optional: may be missing or empty

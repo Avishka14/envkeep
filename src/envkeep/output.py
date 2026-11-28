@@ -50,7 +50,9 @@ def print_check_result(result: CheckResult, env: Path, source: Path) -> None:
     summary += f"{len(result.extra)} extra"
 
     if result.ok:
-        console.print(f"[green]OK[/green] {summary} (extra variables are only warnings)")
+        console.print(
+            f"[green]OK[/green] {summary} (extra variables are only warnings)"
+        )
     else:
         console.print(f"[red]FAILED[/red] {summary}")
 

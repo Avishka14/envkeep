@@ -52,6 +52,90 @@ def test_square_brackets_in_paths_do_not_crash(write_env, tmp_path):
     assert result.exit_code == 2
 
 
+SCHEMA = """\
+variables:
+  DATABASE_URL:
+    type: url
+  PORT:
+    type: int
+    default: 8000
+  SECRET_KEY:
+"""
+
+
+def test_check_with_schema_passes(write_env):
+    schema = write_env(SCHEMA, "envkeep.yml")
+    env = write_env("DATABASE_URL=postgres://u:p@h:5432/db\nSECRET_KEY=x\n")
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 0
+
+
+def test_check_with_schema_reports_missing_required(write_env):
+    schema = write_env(SCHEMA, "envkeep.yml")
+    env = write_env("DATABASE_URL=postgres://u:p@h:5432/db\n")
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 1
+    assert "SECRET_KEY" in result.output
+
+
+def test_check_with_schema_reports_invalid_value_without_printing_it(write_env):
+    schema = write_env(SCHEMA, "envkeep.yml")
+    env = write_env(
+        "DATABASE_URL=postgres://u:p@h/db\nPORT=supersecret\nSECRET_KEY=x\n"
+    )
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 1
+    assert "PORT" in result.output
+    assert "invalid" in result.output
+    assert "supersecret" not in result.output
+
+
+def test_check_with_schema_accepts_empty_value_for_variable_with_default(write_env):
+    schema = write_env(SCHEMA, "envkeep.yml")
+    env = write_env("DATABASE_URL=postgres://u:p@h/db\nPORT=\nSECRET_KEY=x\n")
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 0
+
+
+def test_check_with_invalid_schema_exits_with_code_2(write_env):
+    schema = write_env("variables:\n  A:\n    type: color\n", "envkeep.yml")
+    env = write_env("A=1\n")
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 2
+    assert "unknown type" in result.output
+
+
+def test_check_with_missing_schema_file_exits_with_code_2(write_env, tmp_path):
+    env = write_env("A=1\n")
+
+    result = run("check", "--env", env, "--schema", tmp_path / "nope.yml")
+
+    assert result.exit_code == 2
+    assert "file not found" in result.output
+
+
+def test_schema_replaces_example(write_env, tmp_path):
+    schema = write_env(SCHEMA, "envkeep.yml")
+    env = write_env("DATABASE_URL=postgres://u:p@h/db\nSECRET_KEY=x\n")
+
+    # --example points at a file that doesn't exist; it must be ignored when --schema is used
+    result = run(
+        "check", "--env", env, "--schema", schema, "--example", tmp_path / "nope"
+    )
+
+    assert result.exit_code == 0
+
+
 # generate
 
 
