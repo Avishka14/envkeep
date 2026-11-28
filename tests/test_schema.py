@@ -125,12 +125,12 @@ def test_duplicate_variable_is_rejected():
     problems = problems_of(
         "variables:\n  PORT:\n    type: int\n  PORT:\n    required: false\n"
     )
-    assert any("duplicate key" in p and "PORT" in p for p in problems)
+    assert any("duplicate key" in p and "line 4" in p for p in problems)
 
 
 def test_duplicate_rule_key_is_rejected():
     problems = problems_of("variables:\n  A:\n    type: int\n    type: str\n")
-    assert any("duplicate key" in p and "type" in p for p in problems)
+    assert any("duplicate key" in p and "line 4" in p for p in problems)
 
 
 def test_duplicate_top_level_key_is_rejected():

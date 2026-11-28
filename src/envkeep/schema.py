@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Hashable
 from dataclasses import dataclass
 from pathlib import Path
@@ -85,16 +84,13 @@ def _parse_rule(name: str, spec: Any, problems: list[str]) -> VarRule | None:
     )
 
 
-_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-
-
 class _DuplicateKeyError(yaml.YAMLError):
-    """A mapping key was written twice. Carries only the key name and a line number."""
+    """A mapping key was written twice. Carries only a position, never the key text."""
 
-    def __init__(self, key: object, line: int) -> None:
+    def __init__(self, line: int, column: int) -> None:
         super().__init__("duplicate key")
-        self.key = key
         self.line = line
+        self.column = column
 
 
 def _describe_syntax_error(exc: yaml.YAMLError) -> str:
@@ -121,7 +117,8 @@ class _UniqueKeyLoader(yaml.SafeLoader):
                 if not isinstance(key, Hashable):
                     continue  # the parent class reports unhashable keys itself
                 if key in seen:
-                    raise _DuplicateKeyError(key, key_node.start_mark.line + 1)
+                    mark = key_node.start_mark
+                    raise _DuplicateKeyError(mark.line + 1, mark.column + 1)
                 seen.add(key)
         return super().construct_mapping(node, deep=deep)
 
@@ -133,14 +130,8 @@ def load_schema_text(text: str) -> dict[str, VarRule]:
         # but it also rejects duplicate keys at every level.
         data = yaml.load(text, Loader=_UniqueKeyLoader)
     except _DuplicateKeyError as exc:
-        # Key names are identifiers, but print one only if it looks like one.
-        name = (
-            f" {exc.key!r}"
-            if isinstance(exc.key, str) and _IDENTIFIER.fullmatch(exc.key)
-            else ""
-        )
         raise SchemaError(
-            [f"invalid YAML: duplicate key{name} at line {exc.line}"]
+            [f"invalid YAML: duplicate key at line {exc.line}, column {exc.column}"]
         ) from None
     except yaml.YAMLError as exc:
         raise SchemaError([_describe_syntax_error(exc)]) from None
