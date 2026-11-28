@@ -183,4 +183,8 @@ def load_schema(path: Path) -> dict[str, VarRule]:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         raise SchemaError(["the file is not valid UTF-8"]) from exc
+    except OSError as exc:
+        # Permission denied, the path is a directory, a disk error, and so on.
+        reason = exc.strerror or "unknown error"
+        raise SchemaError([f"could not read the file: {reason}"]) from exc
     return load_schema_text(text)

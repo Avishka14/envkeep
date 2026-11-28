@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -10,6 +11,11 @@ runner = CliRunner()
 
 def run(*args):
     return runner.invoke(app, [str(arg) for arg in args])
+
+
+def flat(text: str) -> str:
+    """Collapse line wraps and runs of spaces, so assertions don't depend on terminal width."""
+    return " ".join(text.split())
 
 
 # check
@@ -354,3 +360,21 @@ def test_diff_missing_file_exits_with_code_2(write_env, tmp_path):
     result = run("diff", a, tmp_path / "nope.env")
 
     assert result.exit_code == 2
+
+
+def test_check_with_unreadable_schema_exits_with_code_2(write_env, monkeypatch):
+    schema = write_env("variables:\n  A:\n", "envkeep.yml")
+    env = write_env("A=1\n")
+    original = Path.read_text
+
+    def deny_schema(self, *args, **kwargs):
+        if self.name == "envkeep.yml":
+            raise PermissionError(13, "Permission denied")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", deny_schema)
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 2
+    assert "could not read the file" in flat(result.output)

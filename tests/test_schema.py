@@ -1,4 +1,5 @@
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -191,3 +192,24 @@ def test_odd_duplicate_key_is_reported_without_echoing_it():
 
     assert any("duplicate key" in p and "line 4" in p for p in problems)
     assert not any("secret" in p for p in problems)
+
+
+def test_unreadable_schema_file_raises_schema_error(tmp_path, monkeypatch):
+    path = tmp_path / "envkeep.yml"
+    path.write_text("variables:\n  A:\n", encoding="utf-8")
+
+    def deny(self, *args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(Path, "read_text", deny)
+
+    with pytest.raises(SchemaError) as excinfo:
+        load_schema(path)
+
+    assert "could not read the file" in str(excinfo.value)
+    assert "Permission denied" in str(excinfo.value)
+
+
+def test_schema_path_that_is_a_directory_raises_schema_error(tmp_path):
+    with pytest.raises(SchemaError):
+        load_schema(tmp_path)
