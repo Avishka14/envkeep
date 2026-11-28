@@ -21,6 +21,10 @@ from envkeep.checks import check_type
         ("url", "https://example.com/path?x=1"),
         ("url", "redis://localhost:6379"),
         ("str", "anything at all"),
+        ("url", "http://localhost:80"),
+        ("url", "http://user:pass@host:8080/path"),
+        ("url", "http://127.0.0.1:8000"),
+        ("url", "http://[::1]:8080"),
     ],
 )
 def test_valid_values(type_name, value):
@@ -49,6 +53,10 @@ def test_valid_values(type_name, value):
         ("url", "https://exa mple.com"),
         ("url", "http://host:99999"),
         ("url", "http://host:abc"),
+        ("url", "http://:80"),
+        ("url", "http://:80/path"),
+        ("url", "postgres://u:p@:5432/db"),
+        ("url", "http://@"),
     ],
 )
 def test_invalid_values(type_name, value):

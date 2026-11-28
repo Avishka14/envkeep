@@ -30,9 +30,10 @@ def _is_url(value: str) -> bool:
     try:
         parts = urlsplit(value)
         _ = parts.port  # raises ValueError for a non-numeric or out-of-range port
+        hostname = parts.hostname  # None when the host part is empty, e.g. "http://:80"
     except ValueError:
         return False
-    return bool(parts.scheme and parts.netloc)
+    return bool(parts.scheme and hostname)
 
 
 _CHECKS = {
