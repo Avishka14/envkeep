@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
+from envkeep.differ import DiffResult
 from envkeep.models import CheckResult
 
 console = Console()
@@ -69,3 +72,58 @@ def print_sync_result(added: list[str], env: Path, dry_run: bool) -> None:
     console.print(f"[green]{verb}[/green] {len(added)} variable(s) to {env_label}:")
     for key in added:
         console.print(f"  + {escape(key)}")
+
+
+def _show(value: str | None) -> str:
+    """Render one value cell. Escaped, because values come from the user's files."""
+    if value is None:
+        return "[dim]-[/dim]"
+    if value == "":
+        return "[dim](empty)[/dim]"
+    return escape(value)
+
+
+def print_diff_result(
+    result: DiffResult,
+    first: Path,
+    second: Path,
+    first_values: dict[str, str],
+    second_values: dict[str, str],
+    *,
+    show_values: bool = False,
+    keys_only: bool = False,
+) -> None:
+    """Print the differences between two env files. Values are hidden unless asked for."""
+    first_label = escape(str(first))
+    second_label = escape(str(second))
+
+    if result.identical:
+        what = "have the same variables" if keys_only else "are identical"
+        console.print(f"[green]OK[/green] {first_label} and {second_label} {what}")
+        return
+
+    rows = (
+        [(key, "only in A", "red") for key in result.only_in_a]
+        + [(key, "only in B", "blue") for key in result.only_in_b]
+        + [(key, "changed", "yellow") for key in result.changed]
+    )
+
+    table = Table(title=f"A: {first_label}\nB: {second_label}")
+    table.add_column("Variable")
+    table.add_column("Status")
+    if show_values:
+        table.add_column("A value")
+        table.add_column("B value")
+
+    for key, status, style in sorted(rows):
+        cells = [escape(key), f"[{style}]{status}[/{style}]"]
+        if show_values:
+            cells.append(_show(first_values.get(key)))
+            cells.append(_show(second_values.get(key)))
+        table.add_row(*cells)
+    console.print(table)
+
+    console.print(
+        f"[yellow]DIFFERENT[/yellow] {len(result.only_in_a)} only in A, "
+        f"{len(result.only_in_b)} only in B, {len(result.changed)} changed"
+    )

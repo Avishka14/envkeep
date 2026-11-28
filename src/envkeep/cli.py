@@ -4,10 +4,12 @@ from typing import Annotated
 import typer
 
 from envkeep.compare import compare
+from envkeep.differ import diff_envs
 from envkeep.fileio import atomic_write_text
 from envkeep.generator import generate_example
 from envkeep.output import (
     print_check_result,
+    print_diff_result,
     print_error,
     print_success,
     print_sync_result,
@@ -153,3 +155,44 @@ def sync(
             print_error(f"could not write {env}: {exc}")
             raise typer.Exit(code=2) from exc
     print_sync_result(added, env, dry_run)
+
+
+@app.command()
+def diff(
+    first: Annotated[Path, typer.Argument(help="The first env file (A).")],
+    second: Annotated[Path, typer.Argument(help="The second env file (B).")],
+    show_values: Annotated[
+        bool,
+        typer.Option(
+            "--show-values",
+            help="Show the values too. They may be secrets, so they are hidden by default.",
+        ),
+    ] = False,
+    keys_only: Annotated[
+        bool,
+        typer.Option(
+            "--keys-only",
+            help="Compare only which variables exist, ignoring value differences.",
+        ),
+    ] = False,
+) -> None:
+    """Show the differences between two env files, for example dev vs staging.
+
+    Values are hidden by default. Exits with code 1 if the files differ.
+    """
+    _require_files(first, second)
+    first_values = _read_env(first)
+    second_values = _read_env(second)
+
+    result = diff_envs(first_values, second_values, keys_only=keys_only)
+    print_diff_result(
+        result,
+        first,
+        second,
+        first_values,
+        second_values,
+        show_values=show_values,
+        keys_only=keys_only,
+    )
+    if not result.identical:
+        raise typer.Exit(code=1)

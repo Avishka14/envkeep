@@ -206,3 +206,67 @@ def test_sync_does_not_copy_trailing_comments_after_quoted_values(write_env):
     assert 'TAG="a # b"\n' in text
     assert "# note" not in text
     assert "# other" not in text
+
+
+# diff
+
+
+def test_diff_identical_files_exit_0(write_env):
+    a = write_env("A=1\n", "a.env")
+    b = write_env("A=1\n", "b.env")
+
+    result = run("diff", a, b)
+
+    assert result.exit_code == 0
+    assert "identical" in result.output
+
+
+def test_diff_reports_differences_with_exit_code_1(write_env):
+    a = write_env("ONLY_A=1\nSAME=1\n", "a.env")
+    b = write_env("ONLY_B=1\nSAME=1\n", "b.env")
+
+    result = run("diff", a, b)
+
+    assert result.exit_code == 1
+    assert "ONLY_A" in result.output
+    assert "ONLY_B" in result.output
+    assert "only in A" in result.output
+
+
+def test_diff_hides_values_by_default(write_env):
+    a = write_env("TOKEN=supersecret1\n", "a.env")
+    b = write_env("TOKEN=supersecret2\n", "b.env")
+
+    result = run("diff", a, b)
+
+    assert result.exit_code == 1
+    assert "TOKEN" in result.output
+    assert "supersecret" not in result.output
+
+
+def test_diff_show_values_prints_them(write_env):
+    a = write_env("TOKEN=supersecret1\n", "a.env")
+    b = write_env("TOKEN=supersecret2\n", "b.env")
+
+    result = run("diff", a, b, "--show-values")
+
+    assert "supersecret1" in result.output
+    assert "supersecret2" in result.output
+
+
+def test_diff_keys_only_ignores_value_differences(write_env):
+    a = write_env("A=1\n", "a.env")
+    b = write_env("A=2\n", "b.env")
+
+    result = run("diff", a, b, "--keys-only")
+
+    assert result.exit_code == 0
+    assert "same variables" in result.output
+
+
+def test_diff_missing_file_exits_with_code_2(write_env, tmp_path):
+    a = write_env("A=1\n", "a.env")
+
+    result = run("diff", a, tmp_path / "nope.env")
+
+    assert result.exit_code == 2
