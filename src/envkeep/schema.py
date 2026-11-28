@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Hashable
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,6 +85,29 @@ def _parse_rule(name: str, spec: Any, problems: list[str]) -> VarRule | None:
     )
 
 
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+class _DuplicateKeyError(yaml.YAMLError):
+    """A mapping key was written twice. Carries only the key name and a line number."""
+
+    def __init__(self, key: object, line: int) -> None:
+        super().__init__("duplicate key")
+        self.key = key
+        self.line = line
+
+
+def _describe_syntax_error(exc: yaml.YAMLError) -> str:
+    """Describe a YAML error by position only, never by source text.
+
+    PyYAML's own message embeds the offending source line, which could be a secret.
+    """
+    mark = getattr(exc, "problem_mark", None) or getattr(exc, "context_mark", None)
+    if mark is None:
+        return "invalid YAML syntax"
+    return f"invalid YAML syntax at line {mark.line + 1}, column {mark.column + 1}"
+
+
 class _UniqueKeyLoader(yaml.SafeLoader):
     """A SafeLoader that rejects duplicate keys instead of silently keeping the last one."""
 
@@ -97,12 +121,7 @@ class _UniqueKeyLoader(yaml.SafeLoader):
                 if not isinstance(key, Hashable):
                     continue  # the parent class reports unhashable keys itself
                 if key in seen:
-                    raise yaml.constructor.ConstructorError(
-                        "while constructing a mapping",
-                        node.start_mark,
-                        f"found duplicate key {key!r}",
-                        key_node.start_mark,
-                    )
+                    raise _DuplicateKeyError(key, key_node.start_mark.line + 1)
                 seen.add(key)
         return super().construct_mapping(node, deep=deep)
 
@@ -110,11 +129,21 @@ class _UniqueKeyLoader(yaml.SafeLoader):
 def load_schema_text(text: str) -> dict[str, VarRule]:
     """Parse schema text into {variable name: rule}. Raises SchemaError if it's invalid."""
     try:
-        data = yaml.load(
-            text, Loader=_UniqueKeyLoader
-        )  # safe_load never builds arbitrary Python objects
+        # A SafeLoader subclass: still never builds arbitrary Python objects,
+        # but it also rejects duplicate keys at every level.
+        data = yaml.load(text, Loader=_UniqueKeyLoader)
+    except _DuplicateKeyError as exc:
+        # Key names are identifiers, but print one only if it looks like one.
+        name = (
+            f" {exc.key!r}"
+            if isinstance(exc.key, str) and _IDENTIFIER.fullmatch(exc.key)
+            else ""
+        )
+        raise SchemaError(
+            [f"invalid YAML: duplicate key{name} at line {exc.line}"]
+        ) from None
     except yaml.YAMLError as exc:
-        raise SchemaError([f"invalid YAML: {' '.join(str(exc).split())}"]) from exc
+        raise SchemaError([_describe_syntax_error(exc)]) from None
 
     if not isinstance(data, dict):
         raise SchemaError(["expected a mapping with a top-level 'variables' key"])

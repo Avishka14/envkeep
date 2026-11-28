@@ -162,3 +162,32 @@ def test_merge_keys_may_still_be_overridden():
     assert rules["A"].type == "int"
     assert rules["B"].type == "str"
     assert rules["B"].required is False
+
+
+def test_syntax_error_reports_position_but_not_source_text():
+    problems = problems_of('variables:\n  A:\n    default: "supersecret\n')
+
+    assert any("line" in p and "column" in p for p in problems)
+    assert not any("supersecret" in p for p in problems)
+
+
+def test_undefined_alias_name_is_not_echoed():
+    problems = problems_of("variables:\n  A:\n    default: *supersecret\n")
+
+    assert problems
+    assert not any("supersecret" in p for p in problems)
+
+
+def test_yaml_error_is_not_chained_to_the_original_exception():
+    with pytest.raises(SchemaError) as excinfo:
+        load_schema_text('variables:\n  A:\n    default: "supersecret\n')
+
+    assert excinfo.value.__cause__ is None
+    assert "supersecret" not in str(excinfo.value)
+
+
+def test_odd_duplicate_key_is_reported_without_echoing_it():
+    problems = problems_of('variables:\n  A:\n  "my secret key":\n  "my secret key":\n')
+
+    assert any("duplicate key" in p and "line 4" in p for p in problems)
+    assert not any("secret" in p for p in problems)
