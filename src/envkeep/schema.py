@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Hashable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -83,10 +84,35 @@ def _parse_rule(name: str, spec: Any, problems: list[str]) -> VarRule | None:
     )
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """A SafeLoader that rejects duplicate keys instead of silently keeping the last one."""
+
+    def construct_mapping(self, node, deep=False):
+        if isinstance(node, yaml.MappingNode):
+            seen = set()
+            for key_node, _ in node.value:
+                if key_node.tag == "tag:yaml.org,2002:merge":
+                    continue  # "<<: *anchor" merges are allowed to be overridden by explicit keys
+                key = self.construct_object(key_node, deep=True)
+                if not isinstance(key, Hashable):
+                    continue  # the parent class reports unhashable keys itself
+                if key in seen:
+                    raise yaml.constructor.ConstructorError(
+                        "while constructing a mapping",
+                        node.start_mark,
+                        f"found duplicate key {key!r}",
+                        key_node.start_mark,
+                    )
+                seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
 def load_schema_text(text: str) -> dict[str, VarRule]:
     """Parse schema text into {variable name: rule}. Raises SchemaError if it's invalid."""
     try:
-        data = yaml.safe_load(text)  # safe_load never builds arbitrary Python objects
+        data = yaml.load(
+            text, Loader=_UniqueKeyLoader
+        )  # safe_load never builds arbitrary Python objects
     except yaml.YAMLError as exc:
         raise SchemaError([f"invalid YAML: {' '.join(str(exc).split())}"]) from exc
 

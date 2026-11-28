@@ -118,3 +118,47 @@ def test_load_schema_rejects_non_utf8_files(tmp_path):
 
     with pytest.raises(SchemaError):
         load_schema(path)
+
+
+def test_duplicate_variable_is_rejected():
+    problems = problems_of(
+        "variables:\n  PORT:\n    type: int\n  PORT:\n    required: false\n"
+    )
+    assert any("duplicate key" in p and "PORT" in p for p in problems)
+
+
+def test_duplicate_rule_key_is_rejected():
+    problems = problems_of("variables:\n  A:\n    type: int\n    type: str\n")
+    assert any("duplicate key" in p and "type" in p for p in problems)
+
+
+def test_duplicate_top_level_key_is_rejected():
+    problems = problems_of("variables:\n  A:\nvariables:\n  B:\n")
+    assert any("duplicate key" in p for p in problems)
+
+
+def test_duplicate_error_includes_a_line_number():
+    problems = problems_of("variables:\n  A:\n  A:\n")
+    assert any("line 3" in p for p in problems)
+
+
+def test_unique_keys_are_still_valid():
+    rules = load("variables:\n  A:\n    type: int\n  B:\n    type: bool\n")
+    assert set(rules) == {"A", "B"}
+
+
+def test_merge_keys_may_still_be_overridden():
+    rules = load(
+        """
+        variables:
+          A: &base
+            type: int
+            required: false
+          B:
+            <<: *base
+            type: str
+        """
+    )
+    assert rules["A"].type == "int"
+    assert rules["B"].type == "str"
+    assert rules["B"].required is False
