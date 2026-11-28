@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 
@@ -15,7 +15,9 @@ from envkeep.output import (
     print_sync_result,
 )
 from envkeep.parser import EnvSyntaxError, parse_env_file, parse_env_text
+from envkeep.schema import SchemaError, VarRule, load_schema
 from envkeep.syncer import sync_env
+from envkeep.validate import validate_env
 
 DEFAULT_ENV = Path(".env")
 DEFAULT_EXAMPLE = Path(".env.example")
@@ -52,6 +54,16 @@ def _read_env(path: Path) -> dict[str, str]:
     except EnvSyntaxError as exc:
         print_error(f"{path}: {exc}")
         raise typer.Exit(code=2) from exc
+    
+
+def _load_schema(path: Path) -> dict[str, VarRule]:
+    """Load a schema, turning every problem into a clean message and exit code 2."""
+    try:
+        return load_schema(path)
+    except SchemaError as exc:
+        for problem in exc.problems:
+            print_error(f"{path}: {problem}")
+        raise typer.Exit(code=2) from exc
 
 
 @app.callback()
@@ -68,14 +80,28 @@ def check(
         Path,
         typer.Option("--example", "-x", help="The file used as the source of truth."),
     ] = DEFAULT_EXAMPLE,
+    schema: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--schema",
+            "-s",
+            help="An envkeep.yml schema to validate against. When given, it replaces --example.",
+        ),
+    ] = None,
 ) -> None:
-    """Compare a .env file against .env.example.
+    """Check a .env file against .env.example or an envkeep.yml schema.
 
-    Exits with code 1 if variables are missing or empty, so it works in CI.
+    Exits with code 1 if variables are missing, empty, or invalid, so it works in CI.
     """
-    _require_files(env, example)
-    result = compare(_read_env(example), _read_env(env))
-    print_check_result(result, env, example)
+    if schema is not None:
+        _require_files(env, schema)
+        result = validate_env(_load_schema(schema), _read_env(env))
+        print_check_result(result, env, schema)
+    else:
+        _require_files(env, example)
+        result = compare(_read_env(example), _read_env(env))
+        print_check_result(result, env, example)
+
     if not result.ok:
         raise typer.Exit(code=1)
 

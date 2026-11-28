@@ -12,41 +12,45 @@ from envkeep.models import CheckResult
 console = Console()
 err_console = Console(stderr=True)
 
-_STYLES = {"missing": "red", "empty": "yellow", "extra": "blue"}
+_STYLES = {"missing": "red", "empty": "yellow", "invalid": "magenta", "extra": "blue"}
 
 
-def print_check_result(result: CheckResult, env: Path, example: Path) -> None:
+def print_check_result(result: CheckResult, env: Path, source: Path) -> None:
     """Print a check result as a colored table plus a one-line summary."""
     env_label = escape(str(env))
-    example_label = escape(str(example))
+    source_label = escape(str(source))
 
     rows = (
-        [("missing", key) for key in result.missing]
-        + [("empty", key) for key in result.empty]
-        + [("extra", key) for key in result.extra]
+        [("missing", key, "") for key in result.missing]
+        + [("empty", key, "") for key in result.empty]
+        + [("invalid", key, problem) for key, problem in result.invalid.items()]
+        + [("extra", key, "") for key in result.extra]
     )
 
     if not rows:
-        console.print(f"[green]OK[/green] {env_label} matches {example_label}")
+        console.print(f"[green]OK[/green] {env_label} matches {source_label}")
         return
 
-    table = Table(title=f"{env_label} vs {example_label}")
+    table = Table(title=f"{env_label} vs {source_label}")
     table.add_column("Status")
     table.add_column("Variable")
-    for status, key in rows:
+    if result.invalid:
+        table.add_column("Problem")
+    for status, key, problem in rows:
         style = _STYLES[status]
-        table.add_row(f"[{style}]{status}[/{style}]", escape(key))
+        cells = [f"[{style}]{status}[/{style}]", escape(key)]
+        if result.invalid:
+            cells.append(escape(problem))
+        table.add_row(*cells)
     console.print(table)
 
-    summary = (
-        f"{len(result.missing)} missing, "
-        f"{len(result.empty)} empty, "
-        f"{len(result.extra)} extra"
-    )
+    summary = f"{len(result.missing)} missing, {len(result.empty)} empty, "
+    if result.invalid:
+        summary += f"{len(result.invalid)} invalid, "
+    summary += f"{len(result.extra)} extra"
+
     if result.ok:
-        console.print(
-            f"[green]OK[/green] {summary} (extra variables are only warnings)"
-        )
+        console.print(f"[green]OK[/green] {summary} (extra variables are only warnings)")
     else:
         console.print(f"[red]FAILED[/red] {summary}")
 
