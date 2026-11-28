@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -10,6 +11,11 @@ runner = CliRunner()
 
 def run(*args):
     return runner.invoke(app, [str(arg) for arg in args])
+
+
+def flat(text: str) -> str:
+    """Collapse line wraps and runs of spaces, so assertions don't depend on terminal width."""
+    return " ".join(text.split())
 
 
 # check
@@ -50,6 +56,90 @@ def test_square_brackets_in_paths_do_not_crash(write_env, tmp_path):
     result = run("check", "--env", tmp_path / "weird[/red].env", "--example", example)
 
     assert result.exit_code == 2
+
+
+SCHEMA = """\
+variables:
+  DATABASE_URL:
+    type: url
+  PORT:
+    type: int
+    default: 8000
+  SECRET_KEY:
+"""
+
+
+def test_check_with_schema_passes(write_env):
+    schema = write_env(SCHEMA, "envkeep.yml")
+    env = write_env("DATABASE_URL=postgres://u:p@h:5432/db\nSECRET_KEY=x\n")
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 0
+
+
+def test_check_with_schema_reports_missing_required(write_env):
+    schema = write_env(SCHEMA, "envkeep.yml")
+    env = write_env("DATABASE_URL=postgres://u:p@h:5432/db\n")
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 1
+    assert "SECRET_KEY" in result.output
+
+
+def test_check_with_schema_reports_invalid_value_without_printing_it(write_env):
+    schema = write_env(SCHEMA, "envkeep.yml")
+    env = write_env(
+        "DATABASE_URL=postgres://u:p@h/db\nPORT=supersecret\nSECRET_KEY=x\n"
+    )
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 1
+    assert "PORT" in result.output
+    assert "invalid" in result.output
+    assert "supersecret" not in result.output
+
+
+def test_check_with_schema_accepts_empty_value_for_variable_with_default(write_env):
+    schema = write_env(SCHEMA, "envkeep.yml")
+    env = write_env("DATABASE_URL=postgres://u:p@h/db\nPORT=\nSECRET_KEY=x\n")
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 0
+
+
+def test_check_with_invalid_schema_exits_with_code_2(write_env):
+    schema = write_env("variables:\n  A:\n    type: color\n", "envkeep.yml")
+    env = write_env("A=1\n")
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 2
+    assert "unknown type" in result.output
+
+
+def test_check_with_missing_schema_file_exits_with_code_2(write_env, tmp_path):
+    env = write_env("A=1\n")
+
+    result = run("check", "--env", env, "--schema", tmp_path / "nope.yml")
+
+    assert result.exit_code == 2
+    assert "file not found" in result.output
+
+
+def test_schema_replaces_example(write_env, tmp_path):
+    schema = write_env(SCHEMA, "envkeep.yml")
+    env = write_env("DATABASE_URL=postgres://u:p@h/db\nSECRET_KEY=x\n")
+
+    # --example points at a file that doesn't exist; it must be ignored when --schema is used
+    result = run(
+        "check", "--env", env, "--schema", schema, "--example", tmp_path / "nope"
+    )
+
+    assert result.exit_code == 0
 
 
 # generate
@@ -206,3 +296,85 @@ def test_sync_does_not_copy_trailing_comments_after_quoted_values(write_env):
     assert 'TAG="a # b"\n' in text
     assert "# note" not in text
     assert "# other" not in text
+
+
+# diff
+
+
+def test_diff_identical_files_exit_0(write_env):
+    a = write_env("A=1\n", "a.env")
+    b = write_env("A=1\n", "b.env")
+
+    result = run("diff", a, b)
+
+    assert result.exit_code == 0
+    assert "identical" in result.output
+
+
+def test_diff_reports_differences_with_exit_code_1(write_env):
+    a = write_env("ONLY_A=1\nSAME=1\n", "a.env")
+    b = write_env("ONLY_B=1\nSAME=1\n", "b.env")
+
+    result = run("diff", a, b)
+
+    assert result.exit_code == 1
+    assert "ONLY_A" in result.output
+    assert "ONLY_B" in result.output
+    assert "only in A" in result.output
+
+
+def test_diff_hides_values_by_default(write_env):
+    a = write_env("TOKEN=supersecret1\n", "a.env")
+    b = write_env("TOKEN=supersecret2\n", "b.env")
+
+    result = run("diff", a, b)
+
+    assert result.exit_code == 1
+    assert "TOKEN" in result.output
+    assert "supersecret" not in result.output
+
+
+def test_diff_show_values_prints_them(write_env):
+    a = write_env("TOKEN=supersecret1\n", "a.env")
+    b = write_env("TOKEN=supersecret2\n", "b.env")
+
+    result = run("diff", a, b, "--show-values")
+
+    assert "supersecret1" in result.output
+    assert "supersecret2" in result.output
+
+
+def test_diff_keys_only_ignores_value_differences(write_env):
+    a = write_env("A=1\n", "a.env")
+    b = write_env("A=2\n", "b.env")
+
+    result = run("diff", a, b, "--keys-only")
+
+    assert result.exit_code == 0
+    assert "same variables" in result.output
+
+
+def test_diff_missing_file_exits_with_code_2(write_env, tmp_path):
+    a = write_env("A=1\n", "a.env")
+
+    result = run("diff", a, tmp_path / "nope.env")
+
+    assert result.exit_code == 2
+
+
+def test_check_with_unreadable_schema_exits_with_code_2(write_env, monkeypatch):
+    schema = write_env("variables:\n  A:\n", "envkeep.yml")
+    env = write_env("A=1\n")
+    original = Path.read_text
+
+    def deny_schema(self, *args, **kwargs):
+        if self.name == "envkeep.yml":
+            raise PermissionError(13, "Permission denied")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", deny_schema)
+
+    result = run("check", "--env", env, "--schema", schema)
+
+    assert result.exit_code == 2
+    assert "could not read the file" in flat(result.output)
